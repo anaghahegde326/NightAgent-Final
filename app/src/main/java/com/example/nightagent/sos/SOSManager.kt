@@ -39,15 +39,24 @@ object SOSManager {
             mediaPlayer?.start()
         }
 
+        Log.d("TRACKING", "SOS location request starting")
         LocationProvider.getLocation(context) { location ->
 
-            Log.d("TRACKING", "LOCATION CALLBACK HIT")
+            Log.d("TRACKING", "LOCATION CALLBACK HIT locationNull=${location == null}")
 
             val message = if (location != null) {
-                "SOS ALERT! Location: https://maps.google.com/?q=${location.latitude},${location.longitude}"
+                """🚨 SOS ALERT!
+
+I need help.
+
+My current location:
+https://maps.google.com/?q=${location.latitude},${location.longitude}"""
             } else {
-                "SOS ALERT! Location unavailable"
+                """🚨 SOS ALERT!
+
+I need help."""
             }
+
 
             // 🔥 START FIRESTORE SESSION
             FirestoreManager.startSOSSession(
@@ -117,9 +126,13 @@ object SOSManager {
 
     private fun sendEmergencySMS(context: Context, message: String) {
 
+        Toast.makeText(context, "Sending SOS SMS...", Toast.LENGTH_SHORT).show()
+
         val contacts = ContactManager.getContacts(context)
+        Log.d("TRACKING", "SOS emergency contacts loaded size=${contacts.size}")
 
         if (contacts.isEmpty()) {
+            Toast.makeText(context, "No emergency contacts found", Toast.LENGTH_SHORT).show()
             Log.e("TRACKING", "NO CONTACTS")
             return
         }
@@ -128,21 +141,74 @@ object SOSManager {
             context, Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
 
+        Log.d("TRACKING", "SEND_SMS permission granted=$hasPermission")
+
         if (!hasPermission) {
             Log.e("TRACKING", "NO SMS PERMISSION")
+            Toast.makeText(context, "SMS permission not granted", Toast.LENGTH_SHORT).show()
             return
         }
 
         val smsManager = SmsManager.getDefault()
 
+        var anySmsSent = false
+        var anySmsFailed = false
+
         for (contact in contacts) {
+            val phone = contact.phone.trim()
+            Log.d("TRACKING", "Attempting SMS to phone=$phone messageLen=${message.length}")
+
+            if (phone.isBlank()) {
+                anySmsFailed = true
+                Log.e("TRACKING", "Blank phone in contact")
+                continue
+            }
 
             try {
-                smsManager.sendTextMessage(contact.phone, null, message, null, null)
-                Log.d("TRACKING", "SMS sent to ${contact.phone}")
+                // Split message into parts if needed (SMS length limit: 160 chars for ASCII, 70 for Unicode)
+                val parts = smsManager.divideMessage(message)
+                Log.d("TRACKING", "Message split into ${parts.size} parts")
+
+                if (parts.size == 1) {
+                    // Single SMS
+                    smsManager.sendTextMessage(phone, null, message, null, null)
+                } else {
+                    // Multiple SMS parts (for longer messages)
+                    val sentIntents = arrayListOf<android.app.PendingIntent>()
+                    val deliveryIntents = arrayListOf<android.app.PendingIntent>()
+                    
+                    for (partIndex in parts.indices) {
+                        sentIntents.add(android.app.PendingIntent.getBroadcast(
+                            context, 
+                            partIndex, 
+                            android.content.Intent("SMS_SENT_$partIndex"), 
+                            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        ))
+                        deliveryIntents.add(android.app.PendingIntent.getBroadcast(
+                            context, 
+                            partIndex, 
+                            android.content.Intent("SMS_DELIVERED_$partIndex"), 
+                            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                        ))
+                    }
+                    
+                    smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, deliveryIntents)
+                }
+                
+                anySmsSent = true
+                Log.d("TRACKING", "SMS sent to $phone")
             } catch (e: Exception) {
-                Log.e("TRACKING", "SMS FAILED: ${e.message}")
+                anySmsFailed = true
+                Log.e("TRACKING", "SMS FAILED to $phone type=${e.javaClass.name} msg=${e.message}", e)
             }
+        }
+
+        if (anySmsSent) {
+            Toast.makeText(context, "SOS SMS sent", Toast.LENGTH_SHORT).show()
+        }
+
+        if (anySmsFailed && !anySmsSent) {
+            Toast.makeText(context, "Failed to send SOS SMS", Toast.LENGTH_SHORT).show()
         }
     }
 
