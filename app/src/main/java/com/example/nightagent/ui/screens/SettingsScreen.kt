@@ -17,7 +17,10 @@ import com.example.nightagent.ui.theme.*
 import com.example.nightagent.sos.SafetySettings
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(
+    onStealthClick: () -> Unit = {},
+    onRegisterClick: () -> Unit = {}
+) {
 
     // ✅ Proper reactive state
     val pushNotifications by SafetySettings.pushNotifications
@@ -137,6 +140,108 @@ fun SettingsScreen() {
                 checked = autoRecordingConsent
             ) {
                 SafetySettings.autoRecordingConsent.value = it
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 🕵️ Stealth Mode
+        item {
+
+            Text(
+                text = "Stealth & Disguise",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                onClick = onStealthClick
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.VisibilityOff,
+                        contentDescription = null,
+                        tint = com.example.nightagent.ui.theme.Lavender,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Stealth Mode", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Disguise app as Calculator",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // 📱 Voice Messaging Registration
+        item {
+
+            Text(
+                text = "Voice Messaging",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                onClick = onRegisterClick
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = null,
+                        tint = com.example.nightagent.ui.theme.Lavender,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Register Phone Number", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Required so contacts can send you voice messages",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = TextSecondary
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))

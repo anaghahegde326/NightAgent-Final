@@ -9,6 +9,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.ContextCompat
@@ -17,11 +18,15 @@ import androidx.lifecycle.lifecycleScope
 import com.example.nightagent.navigation.NavGraph
 import com.example.nightagent.sos.*
 import com.example.nightagent.firebase.AuthManager
+import com.example.nightagent.stealth.StealthDetectionService
+import com.example.nightagent.stealth.StealthRepository
 import com.example.nightagent.ui.theme.NightagentTheme
+import com.example.nightagent.voicemessage.firebase.VoiceMessageFirebase
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
-
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
 
@@ -47,7 +52,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
+    // Draw content edge-to-edge so Compose controls all inset handling
+    enableEdgeToEdge()
+
     requestPermissionsIfNeeded()
+
+    // 🕵️ Resume StealthDetectionService if Stealth Mode was previously enabled
+    val stealthRepo = StealthRepository(this)
+    if (stealthRepo.isStealthModeEnabled.value) {
+        StealthDetectionService.start(this)
+    }
 
     // 🔥 FIREBASE AUTH TEST (UPDATED)
     lifecycleScope.launch(Dispatchers.Main) {
@@ -62,12 +76,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 🔥 FCM TOKEN
+    // 🔥 FCM TOKEN — also update in Firestore for voice message push notifications
     FirebaseMessaging.getInstance().token.addOnCompleteListener {
         if (it.isSuccessful) {
             val token = it.result
             Log.d("FCM", "Token: $token")
             AuthManager.saveFCMToken(token)
+            // Also update in the users collection for voice messaging
+            val uid = FirebaseAuth.getInstance().currentUser?.uid
+            if (uid != null) {
+                lifecycleScope.launch(Dispatchers.IO) {
+                    VoiceMessageFirebase.updateFcmToken(uid, token)
+                }
+            }
         } else {
             Log.e("FCM", "Token failed", it.exception)
         }
@@ -103,25 +124,28 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             NightagentTheme {
-                NavGraph(onShareLocationClick = {
-                    if (!hasLocationPermission()) {
-                        requestLocationPermission()
-                        return@NavGraph
-                    }
-
-                    LocationProvider.getLocation(this@MainActivity) { location ->
-                        if (location != null) {
-                            val link = "https://maps.google.com/?q=${location.latitude},${location.longitude}"
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "My location:\n$link")
-                            }
-                            startActivity(Intent.createChooser(intent, "Share Location"))
-                        } else {
-                            Toast.makeText(this@MainActivity, "Location unavailable", Toast.LENGTH_SHORT).show()
+                NavGraph(
+                    onShareLocationClick = {
+                        if (!hasLocationPermission()) {
+                            requestLocationPermission()
+                            return@NavGraph
                         }
-                    }
-                })
+                        LocationProvider.getLocation(this@MainActivity) { location ->
+                            if (location != null) {
+                                val link = "https://maps.google.com/?q=${location.latitude},${location.longitude}"
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, "My location:\n$link")
+                                }
+                                startActivity(Intent.createChooser(intent, "Share Location"))
+                            } else {
+                                Toast.makeText(this@MainActivity, "Location unavailable", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    // Deep-link from FCM notification: "voicechat/{senderId}"
+                    initialRoute = intent?.getStringExtra("navigate_to")
+                )
             }
         }
     }

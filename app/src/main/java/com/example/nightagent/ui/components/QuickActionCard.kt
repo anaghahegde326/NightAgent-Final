@@ -21,45 +21,50 @@ fun QuickActionCard(
     title: String,
     icon: ImageVector,
     iconColor: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    // Fix 7: Accept an external modifier so callers (e.g. HomeScreen rows) can
+    //         pass weight() — this is the correct way to make cards fill a Row evenly.
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
-            .padding(8.dp)
-            .width(160.dp)
-.height(130.dp)
-            .clip(RoundedCornerShape(24.dp))
+        modifier = modifier
+            .padding(6.dp)
+            // Fix 8: Remove hardcoded width(160.dp) and height(130.dp).
+            //         aspectRatio(1.2f) keeps the card proportional on every screen size.
+            .aspectRatio(1.2f)
+            .clip(RoundedCornerShape(20.dp))
             .clickable { onClick() },
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.Start
         ) {
             Box(
                 modifier = Modifier
                     .size(40.dp)
-                    .background(iconColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
+                    .background(iconColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
-                    contentDescription = null,
+                    contentDescription = title,
                     tint = iconColor,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = title,
                 color = MaterialTheme.colorScheme.onSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2
             )
         }
     }

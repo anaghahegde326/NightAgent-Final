@@ -32,7 +32,7 @@ data class EmergencyContact(
 )
 
 @Composable
-fun ContactsScreen() {
+fun ContactsScreen(onVoiceChat: (String) -> Unit = {}) {
 
     val context = LocalContext.current
 
@@ -99,14 +99,11 @@ fun ContactsScreen() {
                 ContactCard(
                     contact = contact,
                     onDelete = {
-
                         val updated = contacts.filter { it != contact }
-
                         ContactManager.saveContacts(context, updated)
-
-                        // 🔥 RELOAD PROPERLY
                         contacts = ContactManager.getContacts(context)
-                    }
+                    },
+                    onVoiceChat = { onVoiceChat(contact.phone) }
                 )
             }
 
@@ -202,7 +199,8 @@ fun ContactsScreen() {
 @Composable
 fun ContactCard(
     contact: EmergencyContact,
-    onDelete: (EmergencyContact) -> Unit
+    onDelete: (EmergencyContact) -> Unit,
+    onVoiceChat: () -> Unit = {}
 ) {
 
     val context = LocalContext.current
@@ -280,23 +278,35 @@ fun ContactCard(
 
             IconButton(
                 onClick = {
-
                     val intent = Intent(Intent.ACTION_DIAL).apply {
                         data = Uri.parse("tel:${contact.phone}")
                     }
-
                     context.startActivity(intent)
                 },
                 modifier = Modifier
                     .size(48.dp)
                     .background(SuccessGreen.copy(alpha = 0.15f), CircleShape)
             ) {
+                Icon(Icons.Default.Call, null, tint = SuccessGreen, modifier = Modifier.size(24.dp))
+            }
 
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Voice message button — opens the voice chat screen for this contact
+            IconButton(
+                onClick = onVoiceChat,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        androidx.compose.ui.graphics.Color(0xFF9C27B0).copy(alpha = 0.12f),
+                        CircleShape
+                    )
+            ) {
                 Icon(
-                    Icons.Default.Call,
-                    null,
-                    tint = SuccessGreen,
-                    modifier = Modifier.size(24.dp)
+                    Icons.Default.Mic,
+                    contentDescription = "Voice message",
+                    tint = androidx.compose.ui.graphics.Color(0xFF9C27B0),
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }

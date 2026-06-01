@@ -1,5 +1,6 @@
 package com.example.nightagent.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,11 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.LifecycleOwner
-
 import com.example.nightagent.sos.EvidenceRecorder
 import com.example.nightagent.ui.components.*
 import com.example.nightagent.ui.theme.*
-import android.content.Context
 
 @Composable
 fun HomeScreen(
@@ -40,18 +39,22 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         item {
-            // Gradient Header
+            // Fix 9: Replace hardcoded height(180.dp) with wrapContentHeight() +
+            //         statusBarsPadding() so the header expands to fit its content
+            //         and never clips on small screens or under the status bar.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
+                    .wrapContentHeight()
                     .background(
-                        Brush.verticalGradient(
-                            colors = listOf(PurpleStart, PurpleEnd)
-                        ),
-                        shape = RoundedCornerShape(bottomStart = 40.dp, bottomEnd = 40.dp)
+                        Brush.verticalGradient(colors = listOf(PurpleStart, PurpleEnd)),
+                        // Fix 10: Reduce corner radius from 40.dp to 28.dp so the
+                        //          curve is never clipped on narrow screens.
+                        shape = RoundedCornerShape(bottomStart = 28.dp, bottomEnd = 28.dp)
                     )
-                    .padding(24.dp)
+                    // Status bar padding keeps text below the camera notch / status icons
+                    .statusBarsPadding()
+                    .padding(horizontal = 24.dp, vertical = 28.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -71,7 +74,6 @@ fun HomeScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    // Status Indicator
                     Surface(
                         color = SuccessGreen.copy(alpha = 0.2f),
                         shape = RoundedCornerShape(12.dp)
@@ -99,50 +101,61 @@ fun HomeScreen(
         }
 
         item {
-            // SOS Button Section
             SOSButton(onLongPress = onSOSClick)
         }
 
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Text(
                     "Quick Actions",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Fix 11: Pass Modifier.weight(1f) to each card so they share the
+                //          row width equally regardless of screen size. No more
+                //          hardcoded widths fighting each other.
                 Row(modifier = Modifier.fillMaxWidth()) {
                     QuickActionCard(
                         title = "Share Location",
                         icon = Icons.Default.LocationOn,
                         iconColor = InfoBlue,
-                        onClick = onShareLocationClick
+                        onClick = onShareLocationClick,
+                        modifier = Modifier.weight(1f)
                     )
                     QuickActionCard(
                         title = "Fake Call",
                         icon = Icons.Default.Call,
                         iconColor = Color(0xFFFF9800),
-                        onClick = onFakeCallClick
+                        onClick = onFakeCallClick,
+                        modifier = Modifier.weight(1f)
                     )
                 }
+
                 Row(modifier = Modifier.fillMaxWidth()) {
                     QuickActionCard(
                         title = "Safe Walk",
                         icon = Icons.Default.DirectionsWalk,
                         iconColor = SuccessGreen,
-                        onClick = onSafeWalkClick
+                        onClick = onSafeWalkClick,
+                        modifier = Modifier.weight(1f)
                     )
-                    // Manual Recording Buttons
-                    ManualRecordingButtons(context, lifecycleOwner)
+                    // Fix 12: ManualRecordingButtons now also takes weight(1f) so it
+                    //          matches the card next to it without overflow.
+                    ManualRecordingButtons(
+                        context = context,
+                        lifecycleOwner = lifecycleOwner,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
 
         item {
             Spacer(modifier = Modifier.height(24.dp))
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -163,48 +176,73 @@ fun HomeScreen(
         }
 
         item {
-            ActivityItem(
-                title = "Safe Walk Completed",
-                time = "Today, 10:30 PM",
-                icon = Icons.Default.CheckCircle,
-                iconColor = SuccessGreen
-            )
-            ActivityItem(
-                title = "Emergency Contacts Updated",
-                time = "Yesterday, 06:15 PM",
-                icon = Icons.Default.Person,
-                iconColor = InfoBlue
-            )
+            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+                ActivityItem(
+                    title = "Safe Walk Completed",
+                    time = "Today, 10:30 PM",
+                    icon = Icons.Default.CheckCircle,
+                    iconColor = SuccessGreen
+                )
+                ActivityItem(
+                    title = "Emergency Contacts Updated",
+                    time = "Yesterday, 06:15 PM",
+                    icon = Icons.Default.Person,
+                    iconColor = InfoBlue
+                )
+            }
             Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
 
+// Fix 13: Accept modifier so the caller can pass weight(1f), making this slot
+//          the same width as the QuickActionCard beside it. Use fillMaxWidth()
+//          + aspectRatio inside so the button is proportional, not overflowing.
 @Composable
 private fun ManualRecordingButtons(
     context: Context,
-    lifecycleOwner: LifecycleOwner
+    lifecycleOwner: LifecycleOwner,
+    modifier: Modifier = Modifier
 ) {
-Box(modifier = Modifier.fillMaxWidth()) {
+    Box(
+        modifier = modifier
+            .padding(6.dp)
+            .aspectRatio(1.2f),
+        contentAlignment = Alignment.Center
+    ) {
         if (EvidenceRecorder.isRecording) {
             Button(
                 onClick = { EvidenceRecorder.stopRecording(context) },
                 modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
             ) {
-                Icon(Icons.Default.Stop, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Stop Recording")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Stop,
+                        contentDescription = "Stop Recording",
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Stop", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         } else {
             Button(
                 onClick = { EvidenceRecorder.startRecording(context, lifecycleOwner) },
                 modifier = Modifier.fillMaxSize(),
+                shape = RoundedCornerShape(20.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
             ) {
-                Icon(Icons.Default.Videocam, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Start Recording")
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        Icons.Default.Videocam,
+                        contentDescription = "Start Recording",
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Record", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }

@@ -42,10 +42,13 @@ fun SOSButton(onLongPress: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 40.dp),
+            // Fix 14: Replace hardcoded vertical padding(40.dp) with a responsive
+            //          value. 28.dp gives breathing room without wasting screen space
+            //          on compact devices.
+            .padding(vertical = 28.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Outer Glow
+        // Outer glow ring
         Box(
             modifier = Modifier
                 .size(160.dp)
@@ -53,10 +56,11 @@ fun SOSButton(onLongPress: () -> Unit = {}) {
                 .background(SOSGlow, CircleShape)
         )
 
-        // Button Body
+        // Button body
         Box(
             modifier = Modifier
-                .size(180.dp)
+                .size(160.dp)   // Fix 15: Reduce from 180.dp → 160.dp so it fits
+                                //          comfortably on 5" screens without overflow.
                 .scale(scale)
                 .clip(CircleShape)
                 .background(
@@ -72,15 +76,9 @@ fun SOSButton(onLongPress: () -> Unit = {}) {
                     detectTapGestures(
                         onPress = {
                             isPressed = true
-                            try {
-                                awaitRelease()
-                            } finally {
-                                isPressed = false
-                            }
+                            try { awaitRelease() } finally { isPressed = false }
                         },
-                        onLongPress = {
-                            onLongPress()
-                        }
+                        onLongPress = { onLongPress() }
                     )
                 },
             contentAlignment = Alignment.Center

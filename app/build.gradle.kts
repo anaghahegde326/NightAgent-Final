@@ -79,4 +79,22 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Voice Messaging — ExoPlayer for playback
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.media3:media3-common:1.3.1")
+
+    // WorkManager for background upload
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Kotlin datetime
+    implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.0")
+
+    // Accompanist permissions (for rememberPermissionState in Compose)
+    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+
+    // collectAsStateWithLifecycle
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
 }

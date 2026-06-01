@@ -1,35 +1,54 @@
 package com.example.nightagent.navigation
-import com.example.nightagent.ui.screens.   MapScreen
+
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
 import com.example.nightagent.sos.SOSManager
-import androidx.compose.foundation.layout.*
-import com.example.nightagent.ui.screens.*
+import com.example.nightagent.ui.activities.FakeCallActivity
 import com.example.nightagent.ui.components.BottomNavBar
-import androidx.compose.runtime.rememberCoroutineScope
+import com.example.nightagent.ui.screens.*
+import com.example.nightagent.ui.stealth.StealthSettingsScreen
+import com.example.nightagent.voicemessage.ui.UserRegistrationScreen
+import com.example.nightagent.voicemessage.ui.VoiceMessageScreen
+import com.example.nightagent.voicemessage.repository.VoiceMessageRepository
 import kotlinx.coroutines.launch
-import androidx.compose.ui.text.font.FontWeight
-
 @Composable
-fun NavGraph(onShareLocationClick: () -> Unit) {
-
+fun NavGraph(
+    onShareLocationClick: () -> Unit,
+    initialRoute: String? = null   // deep-link from FCM notification
+) {
     val navController = rememberNavController()
     val context = LocalContext.current
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "splash"
     val coroutineScope = rememberCoroutineScope()
 
-    val fullScreenRoutes = listOf("splash", "fakecall", "sosactive", "safewalk")
-    val showBottomBar = currentRoute !in fullScreenRoutes
+    // Navigate to deep-link once the nav graph is ready
+    LaunchedEffect(initialRoute) {
+        if (!initialRoute.isNullOrBlank()) {
+            navController.navigate(initialRoute) {
+                popUpTo("home") { inclusive = false }
+            }
+        }
+    }
+
+    val fullScreenRoutes = listOf("splash", "fakecall", "sosactive", "safewalk", "voicechat", "register")
+    val showBottomBar = fullScreenRoutes.none { currentRoute.startsWith(it) }
 
     Scaffold(
+        // Fix 5: Tell Scaffold not to add its own window insets — the NavigationBar
+        //         already consumes the bottom inset via NavigationBarDefaults.windowInsets,
+        //         and the status bar is handled per-screen. Without this, insets are
+        //         applied twice and the bottom bar gets double-padded / compressed.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (showBottomBar) {
                 BottomNavBar(
@@ -37,9 +56,7 @@ fun NavGraph(onShareLocationClick: () -> Unit) {
                     onNavigate = { route ->
                         coroutineScope.launch {
                             navController.navigate(route) {
-                                popUpTo("home") {   // ✅ FIXED
-                                    saveState = true
-                                }
+                                popUpTo("home") { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -49,13 +66,16 @@ fun NavGraph(onShareLocationClick: () -> Unit) {
             }
         }
     ) { innerPadding ->
-
+        // Fix 6: Apply innerPadding so content never renders behind the bottom bar.
+        //         consumeWindowInsets() prevents child layouts from re-applying the
+        //         same insets a second time.
         NavHost(
             navController = navController,
             startDestination = "splash",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
         ) {
-
             composable("splash") {
                 SplashScreen(onTimeout = {
                     navController.navigate("home") {
@@ -68,43 +88,66 @@ fun NavGraph(onShareLocationClick: () -> Unit) {
                 HomeScreen(
                     onSOSClick = {
                         SOSManager.triggerSOS(context) {
-                            navController.navigate("home") {
-                                popUpTo("home")   // ✅ FIXED
-                            }
+                            navController.navigate("home") { popUpTo("home") }
                         }
                     },
                     onFakeCallClick = {
-                        context.startActivity(android.content.Intent(context, com.example.nightagent.ui.activities.FakeCallActivity::class.java))
+                        context.startActivity(
+                            android.content.Intent(context, FakeCallActivity::class.java)
+                        )
                     },
                     onSafeWalkClick = { navController.navigate("safewalk") },
                     onShareLocationClick = onShareLocationClick
                 )
             }
 
-            composable("safewalk") {
-                SafeWalkScreen()
-            }
+            composable("safewalk") { SafeWalkScreen() }
 
-            // ✅ REAL SCREENS (NO MORE PLACEHOLDERS)
-            composable("map") {
-                MapScreen()
-            }
+            composable("map") { MapScreen() }
 
-            composable("contacts") {
-                ContactsScreen()
-            }
+            composable("contacts") { ContactsScreen(onVoiceChat = { uid -> navController.navigate("voicechat/$uid") }) }
 
             composable("safety") {
-                SafetyScreen(onFakeCallClick = { context.startActivity(android.content.Intent(context, com.example.nightagent.ui.activities.FakeCallActivity::class.java)) })
+                SafetyScreen(onFakeCallClick = {
+                    context.startActivity(
+                        android.content.Intent(context, FakeCallActivity::class.java)
+                    )
+                })
             }
 
             composable("settings") {
-                SettingsScreen()
+                SettingsScreen(
+                    onStealthClick   = { navController.navigate("stealth") },
+                    onRegisterClick  = { navController.navigate("register") }
+                )
             }
 
-            composable("sosactive") {
-                SOSActivatedScreen()
+            composable("stealth") { StealthSettingsScreen() }
+
+            // Phone number registration — required for app-to-app voice messaging
+            composable("register") {
+                val scope = rememberCoroutineScope()
+                UserRegistrationScreen(
+                    onRegister = { phone, name ->
+                        scope.launch {
+                            VoiceMessageRepository(context).registerCurrentUser(phone, name)
+                        }
+                        navController.popBackStack()
+                    },
+                    onSkip = { navController.popBackStack() }
+                )
             }
+
+            // Voice messaging — otherUserId passed as nav argument
+            composable("voicechat/{otherUserId}") { backStackEntry ->
+                val otherUserId = backStackEntry.arguments?.getString("otherUserId") ?: ""
+                VoiceMessageScreen(
+                    otherUserId = otherUserId,
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable("sosactive") { SOSActivatedScreen() }
         }
     }
 }
