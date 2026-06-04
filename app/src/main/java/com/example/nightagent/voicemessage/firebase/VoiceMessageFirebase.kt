@@ -1,6 +1,5 @@
 package com.example.nightagent.voicemessage.firebase
 
-import android.net.Uri
 import android.util.Log
 import com.example.nightagent.firebase.FirebaseConfig
 import com.example.nightagent.voicemessage.model.ChatRoom
@@ -17,94 +16,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.io.File
 
-/**
- * All Firebase I/O for voice messaging.
- *
- * ── Why messages weren't reaching the receiver ────────────────────────────────
- *
- * The previous system had three fatal flaws:
- *
- * 1. WRONG chatId on receiver side
- *    The nav argument passed the contact's PHONE NUMBER as "otherUserId".
- *    Phone numbers ≠ Firebase UIDs. The chatId was computed as
- *    "phoneNumber_senderUID" on the sender and "phoneNumber_receiverUID"
- *    on the receiver — two completely different strings. The Firestore
- *    listener on the receiver was watching the wrong document.
- *
- * 2. NO user identity registration
- *    Anonymous auth gives each device a random UID. There was no mechanism
- *    to map "I want to chat with this phone number" → "that person's UID".
- *    Without this mapping, you can never address a message to the right person.
- *
- * 3. Firestore document path inconsistency
- *    Sender wrote to: voice_messages/{chatId}/messages/{msgId}
- *    Receiver listened to: voice_messages/{chatId}/messages
- *    But chatId was different on each device (see point 1).
- *
- * ── How this is fixed ─────────────────────────────────────────────────────────
- *
- * 1. Users register their phone number + UID in Firestore (users collection).
- *    When User A wants to chat with a phone number, we look up that number's
- *    UID first. Both sides now know each other's real Firebase UID.
- *
- * 2. chatId = sorted([senderUID, receiverUID]).join("_")
- *    This is deterministic and identical on both devices.
- *
- * 3. All messages go to: chats/{chatId}/messages/{messageId}
- *    Both sender and receiver listen to the same path.
- *
- * ── Firebase Security Rules ───────────────────────────────────────────────────
- *
- * Paste these into Firebase Console → Firestore → Rules:
- *
- * rules_version = '2';
- * service cloud.firestore {
- *   match /databases/{database}/documents {
- *
- *     // Users can read any profile (needed for UID lookup by phone)
- *     // but only write their own
- *     match /users/{uid} {
- *       allow read:  if request.auth != null;
- *       allow write: if request.auth != null && request.auth.uid == uid;
- *     }
- *
- *     // Chat rooms — only participants can read/write
- *     match /chats/{chatId} {
- *       allow read, write: if request.auth != null &&
- *         request.auth.uid in resource.data.participants;
- *       allow create: if request.auth != null &&
- *         request.auth.uid in request.resource.data.participants;
- *
- *       match /messages/{messageId} {
- *         allow read: if request.auth != null &&
- *           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
- *         allow create: if request.auth != null &&
- *           request.resource.data.senderId == request.auth.uid;
- *         allow update: if request.auth != null &&
- *           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
- *       }
- *     }
- *   }
- * }
- *
- * Paste these into Firebase Console → Storage → Rules:
- *
- * rules_version = '2';
- * service firebase.storage {
- *   match /b/{bucket}/o {
- *     match /voice_messages/{senderId}/{allPaths=**} {
- *       allow read:  if request.auth != null;
- *       allow write: if request.auth != null && request.auth.uid == senderId;
- *     }
- *   }
- * }
- *
- * ── Firestore Index required ──────────────────────────────────────────────────
- *
- * Collection: chats/{chatId}/messages
- * Fields: timestamp ASC
- * (Firebase will prompt you to create this automatically on first query)
- */
+
 object VoiceMessageFirebase {
 
     private val db      get() = FirebaseConfig.firestore
@@ -216,28 +128,39 @@ object VoiceMessageFirebase {
         senderId: String,
         messageId: String,
         onProgress: (Int) -> Unit = {}
-    ): Result<String> = try {
-        val ref = storage.reference
-            .child("voice_messages/$senderId/$messageId.m4a")
-
-        Log.d(TAG_UPLOAD, "Starting upload: ${file.name} (${file.length()} bytes)")
-
-        val uploadTask = ref.putFile(Uri.fromFile(file))
-        uploadTask.addOnProgressListener { snap ->
-            val pct = if (snap.totalByteCount > 0)
-                (100.0 * snap.bytesTransferred / snap.totalByteCount).toInt()
-            else 0
-            onProgress(pct)
-            Log.d(TAG_UPLOAD, "Upload progress: $pct%")
+    ): Result<String> {
+        // FIX 8: Use putStream() instead of putFile(Uri.fromFile(file)).
+        // Uri.fromFile() produces a file:// URI. On Android 10+ with strict mode
+        // this throws FileUriExposedException on some OEMs. putStream() sends
+        // the raw bytes directly without any URI conversion — works on all levels.
+        if (!file.exists() || file.length() == 0L) {
+            Log.e(TAG_UPLOAD, "uploadAudio: file missing or empty — ${file.absolutePath}")
+            return Result.failure(IllegalArgumentException("Audio file missing or empty"))
         }
 
-        uploadTask.await()
-        val url = ref.downloadUrl.await().toString()
-        Log.d(TAG_UPLOAD, "Upload complete. URL: $url")
-        Result.success(url)
-    } catch (e: Exception) {
-        Log.e(TAG_UPLOAD, "Upload FAILED: ${e.message}", e)
-        Result.failure(e)
+        return try {
+            val ref = storage.reference
+                .child("voice_messages/$senderId/$messageId.m4a")
+
+            Log.d(TAG_UPLOAD, "Starting upload: ${file.name} (${file.length()} bytes)")
+
+            val uploadTask = ref.putStream(file.inputStream())
+            uploadTask.addOnProgressListener { snap ->
+                val pct = if (snap.totalByteCount > 0)
+                    (100.0 * snap.bytesTransferred / snap.totalByteCount).toInt()
+                else 0
+                onProgress(pct)
+                Log.d(TAG_UPLOAD, "Upload progress: $pct% (${snap.bytesTransferred}/${snap.totalByteCount} bytes)")
+            }
+
+            uploadTask.await()
+            val url = ref.downloadUrl.await().toString()
+            Log.d(TAG_UPLOAD, "Upload complete. URL: $url")
+            Result.success(url)
+        } catch (e: Exception) {
+            Log.e(TAG_UPLOAD, "Upload FAILED: ${e.message}", e)
+            Result.failure(e)
+        }
     }
 
     // ── Save message to Firestore ─────────────────────────────────────────────
@@ -324,11 +247,14 @@ object VoiceMessageFirebase {
                             durationMs    = doc.getLong("durationMs") ?: 0L,
                             fileSize      = doc.getLong("fileSize") ?: 0L,
                             timestamp     = doc.getLong("timestamp") ?: 0L,
-                            uploadStatus  = UploadStatus.valueOf(
-                                doc.getString("uploadStatus") ?: UploadStatus.DONE.name
+                            // FIX 9: Use enumValueOrDefault instead of valueOf() to
+                            // prevent IllegalArgumentException on unknown/stale enum
+                            // values stored in Firestore from older app versions.
+                            uploadStatus  = enumValueOrDefault(
+                                doc.getString("uploadStatus"), UploadStatus.DONE
                             ),
-                            messageStatus = MessageStatus.valueOf(
-                                doc.getString("messageStatus") ?: MessageStatus.SENT.name
+                            messageStatus = enumValueOrDefault(
+                                doc.getString("messageStatus"), MessageStatus.SENT
                             )
                         )
                     } catch (e: Exception) {
@@ -451,8 +377,22 @@ object VoiceMessageFirebase {
         "fcmToken"    to fcmToken
     )
 
-    const val TAG_UPLOAD  = "VOICE_UPLOAD"
-    const val TAG_SYNC    = "FIRESTORE_SYNC"
+    /**
+     * FIX 9: Safe enum parsing — returns [default] instead of throwing
+     * IllegalArgumentException when the stored string doesn't match any value.
+     */
+    private inline fun <reified T : Enum<T>> enumValueOrDefault(value: String?, default: T): T {
+        if (value.isNullOrBlank()) return default
+        return try {
+            enumValueOf<T>(value)
+        } catch (_: IllegalArgumentException) {
+            Log.w(TAG, "Unknown enum value '$value' for ${T::class.simpleName} — using $default")
+            default
+        }
+    }
+
+    const val TAG_UPLOAD   = "VOICE_UPLOAD"
+    const val TAG_SYNC     = "FIRESTORE_SYNC"
     const val TAG_REALTIME = "CHAT_REALTIME"
-    private const val TAG = "VoiceMessageFirebase"
+    private const val TAG  = "VoiceMessageFirebase"
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- One-shot guard: set on MapView after safety-place markers are loaded
+         so fetchSafetyPlaces is not re-triggered on every recomposition. -->
+    <item name="map_places_loaded_tag" type="id" />
+</resources>

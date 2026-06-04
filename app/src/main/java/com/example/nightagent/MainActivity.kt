@@ -40,6 +40,11 @@ class MainActivity : ComponentActivity() {
             if (!granted) Toast.makeText(this, "Location permission required", Toast.LENGTH_LONG).show()
         }
 
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) Toast.makeText(this, "Camera permission required for evidence capture", Toast.LENGTH_LONG).show()
+        }
+
     private val audioPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) Toast.makeText(this, "Microphone permission required for Voice SOS", Toast.LENGTH_LONG).show()
@@ -178,6 +183,7 @@ class MainActivity : ComponentActivity() {
         if (!hasSmsPermission()) smsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
         if (!hasLocationPermission()) locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         if (!hasAudioPermission()) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        if (!hasCameraPermission()) cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
     private fun hasSmsPermission() =
@@ -188,6 +194,9 @@ class MainActivity : ComponentActivity() {
 
     private fun hasAudioPermission() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    private fun hasCameraPermission() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
     private fun requestLocationPermission() {
         locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)

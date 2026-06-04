@@ -45,20 +45,25 @@ object LocationProvider {
             .setMaxUpdateAgeMillis(15000)
             .build()
 
-        fusedLocationClient.getCurrentLocation(
-            request,
-            com.google.android.gms.tasks.CancellationTokenSource().token
-        )
+        // FIX: Hold a reference to CancellationTokenSource so its token can
+        // be cancelled after the task resolves — previously the source was
+        // discarded immediately, keeping the underlying task alive even after
+        // the caller's scope was destroyed (leaked FusedLocation task).
+        val cts = com.google.android.gms.tasks.CancellationTokenSource()
+
+        fusedLocationClient.getCurrentLocation(request, cts.token)
             .addOnSuccessListener { location ->
+                cts.cancel()
                 if (location != null) {
                     Log.d("LocationProvider", "Location: ${location.latitude}, ${location.longitude}")
                     callback(location)
                 } else {
-                    Log.e("LocationProvider", "Location is NULL")
+                    Log.e("LocationProvider", "Location is NULL — GPS may be off")
                     callback(null)
                 }
             }
             .addOnFailureListener {
+                cts.cancel()
                 Log.e("LocationProvider", "Location failed: ${it.message}")
                 callback(null)
             }

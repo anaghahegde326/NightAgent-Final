@@ -3,8 +3,10 @@ package com.example.nightagent.voicemessage.upload
 import android.content.Context
 import android.util.Log
 import androidx.work.BackoffPolicy
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkRequest
@@ -144,6 +146,16 @@ class VoiceUploadWorker(
 
             val request = OneTimeWorkRequestBuilder<VoiceUploadWorker>()
                 .setInputData(data)
+                // FIX 10: Require network connectivity before the worker runs.
+                // Without this constraint, WorkManager launches the worker
+                // immediately with no network, causing an immediate failure
+                // followed by exponential backoff delays instead of simply
+                // waiting for connectivity to be restored.
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
                 .setBackoffCriteria(
                     BackoffPolicy.EXPONENTIAL,
                     WorkRequest.MIN_BACKOFF_MILLIS,

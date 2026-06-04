@@ -171,7 +171,7 @@ class SafetyRepository {
 
     private fun fetchOverpassJson(latitude: Double, longitude: Double): String {
         val query = """
-            [out:json][timeout:2];
+            [out:json][timeout:15];
             (
               node["amenity"="police"](around:2000,$latitude,$longitude);
               node["amenity"="hospital"](around:2000,$latitude,$longitude);
@@ -191,8 +191,11 @@ class SafetyRepository {
         val connection = url.openConnection() as HttpURLConnection
         return connection.run {
             requestMethod = "GET"
-            connectTimeout = 2_000
-            readTimeout = 2_000
+            // FIX: 2-second timeout caused near-constant failures because the
+            // Overpass API regularly takes 4-10 seconds to respond. Raised to
+            // 15 seconds to match the [timeout:15] in the Overpass query body.
+            connectTimeout = 15_000
+            readTimeout = 15_000
             inputStream.bufferedReader().use { it.readText() }
         }
     }

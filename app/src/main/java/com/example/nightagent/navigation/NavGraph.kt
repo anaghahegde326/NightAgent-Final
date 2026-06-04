@@ -11,7 +11,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
+import com.example.nightagent.evidence.EvidenceCaptureService
+import com.example.nightagent.evidence.EvidenceScreen
 import com.example.nightagent.sos.SOSManager
+import com.example.nightagent.streaming.GuardianListenScreen
+import com.example.nightagent.streaming.VictimStreamScreen
 import com.example.nightagent.ui.activities.FakeCallActivity
 import com.example.nightagent.ui.components.BottomNavBar
 import com.example.nightagent.ui.screens.*
@@ -40,7 +44,7 @@ fun NavGraph(
         }
     }
 
-    val fullScreenRoutes = listOf("splash", "fakecall", "sosactive", "safewalk", "voicechat", "register")
+    val fullScreenRoutes = listOf("splash", "fakecall", "sosactive", "safewalk", "voicechat", "register", "victimstream", "guardianstream")
     val showBottomBar = fullScreenRoutes.none { currentRoute.startsWith(it) }
 
     Scaffold(
@@ -87,10 +91,19 @@ fun NavGraph(
             composable("home") {
                 HomeScreen(
                     onSOSClick = {
+                        val sosId = System.currentTimeMillis().toString()
+                        // Start mic+location foreground service first (allowed from foreground Activity)
+                        EvidenceCaptureService.start(context, sosId)
+                        // Trigger SOS (SMS, alarm, Firestore session)
                         SOSManager.triggerSOS(context) {
-                            navController.navigate("home") { popUpTo("home") }
+                            EvidenceCaptureService.stop(context)
+                        }
+                        // Navigate to Evidence screen — CameraX starts there in the UI layer
+                        navController.navigate("evidence") {
+                            launchSingleTop = true
                         }
                     },
+
                     onFakeCallClick = {
                         context.startActivity(
                             android.content.Intent(context, FakeCallActivity::class.java)
@@ -113,6 +126,24 @@ fun NavGraph(
                         android.content.Intent(context, FakeCallActivity::class.java)
                     )
                 })
+            }
+
+            composable("evidence") { EvidenceScreen() }
+
+            composable("victimstream/{guardianUid}") { back ->
+                val guardianUid = back.arguments?.getString("guardianUid") ?: ""
+                VictimStreamScreen(
+                    guardianUid = guardianUid,
+                    onStopSOS   = { navController.popBackStack() }
+                )
+            }
+
+            composable("guardianstream/{callId}") { back ->
+                val callId = back.arguments?.getString("callId") ?: ""
+                GuardianListenScreen(
+                    callId  = callId,
+                    onLeave = { navController.popBackStack() }
+                )
             }
 
             composable("settings") {

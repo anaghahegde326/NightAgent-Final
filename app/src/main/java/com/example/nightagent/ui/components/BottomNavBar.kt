@@ -28,6 +28,7 @@ fun BottomNavBar(selected: String, onNavigate: (String) -> Unit) {
             NavItem("Home",     "home",     Icons.Outlined.Home,     Icons.Filled.Home),
             NavItem("Map",      "map",      Icons.Outlined.Map,      Icons.Filled.Map),
             NavItem("Contacts", "contacts", Icons.Outlined.People,   Icons.Filled.People),
+            NavItem("Evidence", "evidence", Icons.Outlined.VideoFile, Icons.Filled.VideoFile),
             NavItem("Safety",   "safety",   Icons.Outlined.Shield,   Icons.Filled.Shield),
             NavItem("Settings", "settings", Icons.Outlined.Settings, Icons.Filled.Settings)
         )

@@ -153,16 +153,29 @@ class VoiceMessageRepository(private val context: Context) {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
-     * Normalize phone to E.164 format for consistent lookup.
-     * Strips spaces, dashes, parentheses. Adds +91 if no country code.
-     * Adjust the default country code for your region.
+     * FIX 7: Normalize phone to E.164 for consistent Firestore lookup.
+     *
+     * The lookup uses whereEqualTo() which requires an EXACT string match.
+     * Both the registering device and the looking-up device must produce
+     * the same normalized string, otherwise the lookup returns null and
+     * the session never initialises ("Receiver not found" error).
+     *
+     * Normalization rules:
+     *   - Strip all whitespace, dashes, parentheses
+     *   - If already starts with +, keep as-is
+     *   - If 10 digits (no country code), prepend +91 (India — adjust as needed)
+     *   - Otherwise keep digits only
      */
     private fun normalizePhone(phone: String): String {
-        val digits = phone.filter { it.isDigit() || it == '+' }
+        // Step 1: remove all formatting characters except digits and +
+        val cleaned = phone.replace(Regex("[\\s\\-().]"), "")
+        val digits  = cleaned.filter { it.isDigit() || it == '+' }
         return when {
-            digits.startsWith("+") -> digits
-            digits.length == 10    -> "+91$digits"   // India default — change as needed
-            else                   -> digits
-        }
+            digits.startsWith("+") -> digits          // already E.164
+            digits.length == 10   -> "+91$digits"     // India 10-digit
+            digits.length == 11 && digits.startsWith("0") ->
+                "+91${digits.drop(1)}"                // 011-digit with leading 0
+            else -> digits
+        }.also { Log.d("VoiceRepo", "normalizePhone: '$phone' → '$it'") }
     }
 }
